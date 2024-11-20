@@ -1,0 +1,16 @@
+  Export.image.toDrive({
+  image: map.clip(roi), 
+  description: 'classificao mata seca', 
+  region: roi, 
+  scale: 10, 
+  folder: 'mestrado', 
+  crs: 'EPSG:4326', 
+  maxPixels: 1e13
+  })
+  
+  Export.table.toDrive({
+  collection: samples,
+  description: 'amostras_pontos',
+  folder: 'GEE',
+  fileFormat: 'SHP'
+  }) 
