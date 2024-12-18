@@ -7,7 +7,10 @@
   crs: 'EPSG:4326', 
   maxPixels: 1e13
   })
-  
+
+ // converter para fc para exportar geometrias
+ var teste = ee.FeatureCollection(area);
+
   Export.table.toDrive({
   collection: samples,
   description: 'amostras_pontos',
