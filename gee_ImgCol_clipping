@@ -1,0 +1,9 @@
+var sen2 = imageCollection.select('B[2-8]','B8A','B11','B12')
+.filterDate('2024','2025')
+.filterBounds(geometry)
+.filterMetadata('CLOUDY_PIXEL_PERCENTAGE','less_than',10)
+.map(function(img) {
+ return img.clip(geometry) 
+})
+
+print(sen2)
