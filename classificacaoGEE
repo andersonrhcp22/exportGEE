@@ -1,0 +1,386 @@
+/*Google Earth Engine Tutorial-73: Landcover Classification using Sentinel1 and Sentinel2 Images
+https://www.youtube.com/watch?v=oljJG-7Egug&t=1s */
+
+// Function to mask clouds using the Sentinel-2 QA band.
+function maskS2clouds(image) {
+  var qa = image.select('QA60'); 
+
+  // Bits 10 and 11 are clouds and cirrus, respectively.
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0).and(
+             qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  // Return the masked and scaled data, without the QA bands.
+  return image.updateMask(mask).divide(10000)
+      .select("B.*")
+      .copyProperties(image, ["system:time_start"]);
+}  
+
+var sen2 = imageCollection
+.filterDate('2021','2024')
+.filterBounds(roi)
+.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',1))
+.map(maskS2clouds)
+.select('B[2-8]','B8A','B11','B12')
+/*.map(function(img){
+  var bands = img.select('B[2-8]','B8A',B11','B12').multiply(0.0001)
+  var ndvi = bands.normalizedDifference(['B8','B4']).rename('ndvi')
+  var savi = bands.expression('(1 + 0.5) * (nir - red)/(nir+ red + 0.5)', {
+    'nir': img.select('B8'),
+    'red': img.select('B4')}).rename('savi')
+  var ndwi = bands.normalizedDifference((['B3','B8'])).rename('ndwi')
+  return bands.addBands(ndvi).addBands(savi).addBands(ndwi)
+  .copyProperties(img,['system:time_start','system:time_end'])
+}) */
+
+var sen2_in = sen2
+.map(function(img){
+  var bands = img.select('B[2-8]','B8A','B11','B12').multiply(0.0001)
+  var ndvi = bands.normalizedDifference(['B8','B4']).rename('ndvi')
+  var savi = bands.expression('(1 + 0.5) * (nir - red)/(nir+ red + 0.5)', {
+    'nir': img.select('B8'),
+    'red': img.select('B4')}).rename('savi')
+  var ndwi = bands.normalizedDifference((['B3','B8'])).rename('ndwi')
+  return bands.addBands(ndvi).addBands(savi).addBands(ndwi)
+  .copyProperties(img,['system:time_start','system:time_end'])
+})
+
+//print('qtd de imgs sen2', sen2.size())
+print('coleção sen2',sen2)
+
+var img_amostral = sen2
+.filter(ee.Filter.calendarRange(8, 9, 'month'))
+.median()
+
+var nasadem = image.select('elevation').clip(roi)
+var slope = ee.Terrain.slope(nasadem)
+var topo = nasadem.addBands(slope)
+
+
+var sen2_per = sen2.reduce(ee.Reducer.percentile([25,55,75]))
+var sen2_med = sen2.median()
+var sen2_mediana = sen2.reduce(ee.Reducer.median())
+var sen2_mean = sen2.reduce(ee.Reducer.mean())
+var sen2_desvpad = sen2.reduce(ee.Reducer.stdDev())
+var sen2_min = sen2.reduce(ee.Reducer.min());
+var sen2_var = sen2.reduce(ee.Reducer.variance())
+
+var sen2_per_in = sen2_in.reduce(ee.Reducer.percentile([25,55,75]))
+var sen2_med_in = sen2_in.median()
+var sen2_mediana_in = sen2_in.reduce(ee.Reducer.median())
+var sen2_mean_in = sen2_in.reduce(ee.Reducer.mean())
+var sen2_desvpad_in = sen2_in.reduce(ee.Reducer.stdDev())
+var sen2_min_in = sen2_in.reduce(ee.Reducer.min());
+var sen2_var_in = sen2_in.reduce(ee.Reducer.variance())
+
+Map.addLayer(img_amostral.clip(roi),b12_6_4_vis,'img_amostral',false)
+
+function despeckle(img){
+  return img.focalMean(10, 'square', 'meters')
+  .copyProperties(img, img.propertyNames())
+}
+
+var sen1 = imageCollection2
+.filterDate('2021','2024')
+.filterBounds(roi)
+.filter(ee.Filter.listContains('transmitterReceiverPolarisation','VV'))
+.filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
+.filter(ee.Filter.eq('instrumentMode','IW'))
+.select('VV','VH')
+.filter(ee.Filter.eq('orbitProperties_pass','DESCENDING'))
+.map(despeckle)
+
+print('coleçao sen1', sen1)
+
+var sen1_per = sen1.reduce(ee.Reducer.percentile([25,55,75]))
+var sen1_med = sen1.median()
+var sen1_mediana = sen1.reduce(ee.Reducer.median())
+var sen1_mean = sen1.reduce(ee.Reducer.mean())
+var sen1_desvpad = sen1.reduce(ee.Reducer.stdDev())
+var sen1_min = sen1.reduce(ee.Reducer.min());
+var sen1_var = sen1.reduce(ee.Reducer.variance())
+
+//var sen1_med_seca = sen1_seca.reduce(ee.Reducer.median())
+
+Map.addLayer(sen1_med.clip(roi),[],'sen1',false)
+
+var dataset = sen2_med.addBands(sen2_mean).addBands(sen2_mediana).addBands(sen2_per)
+.addBands(topo).clip(roi)
+
+var dataset2 = sen2_med_in.addBands(sen2_mean_in).addBands(sen2_mediana_in)
+.addBands(sen2_per_in).addBands(topo).clip(roi)
+
+var dataset3 = sen1_med.addBands(sen1_mean).addBands(sen1_mediana)
+.addBands(sen1_per).addBands(topo).clip(roi)
+
+var dataset4 = sen2_med.addBands(sen2_mean).addBands(sen2_mediana).addBands(sen2_per)
+.addBands(sen1_med).addBands(sen1_mean).addBands(sen1_mediana)
+.addBands(sen1_per).addBands(topo).clip(roi)
+
+var dataset5 = sen2_med_in.addBands(sen2_mean_in).addBands(sen2_mediana_in)
+.addBands(sen2_per_in).addBands(sen1_med).addBands(sen1_mean)
+.addBands(sen1_mediana).addBands(sen1_per).addBands(topo).clip(roi)
+
+
+var samples = cerradao.merge(rocha).merge(florestal).merge(area_nao_vegetada)
+.merge(agua).merge(agropecuaria).merge(mata_seca).merge(agricultura)
+
+
+var treinamento = dataset.sampleRegions({
+  collection: samples,
+  properties: ['class'],
+  scale: 10,
+  tileScale: 10
+});
+
+var treinamento2 = dataset2.sampleRegions({
+  collection: samples,
+  properties: ['class'],
+  scale: 10,
+  tileScale: 10
+});
+
+var treinamento3 = dataset3.sampleRegions({
+  collection: samples,
+  properties: ['class'],
+  scale: 10,
+  tileScale: 10
+});
+
+var treinamento4 = dataset4.sampleRegions({
+  collection: samples,
+  properties: ['class'],
+  scale: 10,
+  tileScale: 10
+});
+
+var treinamento5 = dataset5.sampleRegions({
+  collection: samples,
+  properties: ['class'],
+  scale: 10,
+  tileScale: 10
+});
+
+var bandas_model = dataset.bandNames()
+var bandas_model2 = dataset2.bandNames()
+
+var bandas_model3 = dataset3.bandNames()
+var bandas_model4 = dataset4.bandNames()
+var bandas_model5 = dataset5.bandNames() 
+
+/*print('qntd de variaveis model: ', bandas_model)
+print('qntd de variaveis model2: ', bandas_model2)
+print('qntd de variaveis model3: ', bandas_model3)
+print('qntd de variaveis model4: ', bandas_model4)
+print('qntd de variaveis model5: ', bandas_model5) */
+
+var withRandom = treinamento.randomColumn('random')
+var withRandom2 = treinamento2.randomColumn('random')
+var withRandom3 = treinamento3.randomColumn('random')
+
+var withRandom4 = treinamento4.randomColumn('random')
+var withRandom5 = treinamento5.randomColumn('random')
+
+
+var split = 0.7;  // Roughly 70% training, 30% testing.
+var trainingPartition = withRandom.filter(ee.Filter.lt('random', split));
+var testingPartition = withRandom.filter(ee.Filter.gte('random', split));
+
+var trainingPartition2 = withRandom2.filter(ee.Filter.lt('random', split));
+var testingPartition2 = withRandom2.filter(ee.Filter.gte('random', split))
+
+var trainingPartition3 = withRandom3.filter(ee.Filter.lt('random', split));
+var testingPartition3 = withRandom3.filter(ee.Filter.gte('random', split))
+
+var trainingPartition4 = withRandom4.filter(ee.Filter.lt('random', split));
+var testingPartition4 = withRandom4.filter(ee.Filter.gte('random', split));
+
+var trainingPartition5 = withRandom5.filter(ee.Filter.lt('random', split));
+var testingPartition5 = withRandom5.filter(ee.Filter.gte('random', split));
+
+
+// Trained with 70% of our data.
+var model = ee.Classifier.smileRandomForest(500).train({
+  features: trainingPartition,
+  classProperty: 'class',
+  inputProperties: bandas_model
+});
+
+var model2 = ee.Classifier.smileRandomForest(500).train({
+  features: trainingPartition2,
+  classProperty: 'class',
+  inputProperties: bandas_model2
+});
+  
+var model3 = ee.Classifier.smileRandomForest(500).train({
+  features: trainingPartition3,
+  classProperty: 'class',
+  inputProperties: bandas_model3
+});
+
+var model4 = ee.Classifier.smileRandomForest(500).train({
+  features: trainingPartition4,
+  classProperty: 'class',
+  inputProperties: bandas_model4
+});
+
+var model5 = ee.Classifier.smileRandomForest(500).train({
+  features: trainingPartition5,
+  classProperty: 'class',
+  inputProperties: bandas_model5
+});
+
+
+  
+var map = dataset.classify(model)
+var map2 = dataset2.classify(model2)
+
+var map3 = dataset3.classify(model3)
+var map4 = dataset4.classify(model4)
+var map5 = dataset5.classify(model5)
+
+
+
+// Classify the test FeatureCollection.
+var test = testingPartition.classify(model);
+var test2 = testingPartition2.classify(model2);
+
+var test3 = testingPartition3.classify(model3)
+var test4 = testingPartition4.classify(model4)
+var test5 = testingPartition5.classify(model5)
+
+
+//Map.addLayer(map, map_vis, 'map', false)
+Map.addLayer(map2, map_vis, 'map2', false)
+
+Map.addLayer(map3, map_vis, 'map3', false)
+//Map.addLayer(map4, map_vis, 'map4', false)
+Map.addLayer(map5, map_vis, 'map5', false)
+
+// Print the confusion matrix.
+var confusionMatrix = test.errorMatrix('class', 'classification');
+print('Confusion Matrix Model :', confusionMatrix)
+print('Kappa model: ', confusionMatrix.kappa())
+print('Overall accuracy Model : ', confusionMatrix.accuracy());
+print('F1-score Model: ', confusionMatrix.fscore())
+
+/*print('Kappa: ', confusionMatrix.kappa());
+print('Precisão do consumidor:', confusionMatrix.consumersAccuracy());
+print('Precisão do produtor: ', confusionMatrix.producersAccuracy()); */
+
+var confusionMatrix2 = test2.errorMatrix('class', 'classification');
+print('Confusion Matrix Model 2:', confusionMatrix2)
+print('Overall accuracy Model 2: ', confusionMatrix2.accuracy())
+print('Kappa model 2: ', confusionMatrix2.kappa())
+print('F1-score Model 2: ', confusionMatrix2.fscore()); 
+
+var confusionMatrix3 = test3.errorMatrix('class', 'classification');
+print('Confusion Matrix Model 3:', confusionMatrix3)
+print('Kappa model 3: ', confusionMatrix3.kappa())
+print('Overall accuracy Model 3: ', confusionMatrix3.accuracy())
+print('F1-score Model 3: ', confusionMatrix3.fscore());
+
+var confusionMatrix4 = test4.errorMatrix('class', 'classification');
+print('Confusion Matrix Model 4:', confusionMatrix4)
+print('Kappa model 4: ', confusionMatrix4.kappa())
+print('Overall accuracy Model 4: ', confusionMatrix4.accuracy())
+print('F1-score Model 4: ', confusionMatrix4.fscore())
+
+var confusionMatrix5 = test5.errorMatrix('class', 'classification');
+print('Confusion Matrix Model 5:', confusionMatrix5)
+print('Kappa model 5: ', confusionMatrix5.kappa())
+print('Overall accuracy Model 5: ', confusionMatrix5.accuracy())
+print('F1-score Model 5: ', confusionMatrix5.fscore())
+
+var dict = model.explain();
+//print('Explain:',dict);
+var dict2 = model2.explain()
+var dict3 = model3.explain()
+
+var dict4 = model4.explain()
+var dict5 = model5.explain()
+
+var variable_importance = ee.Feature(null, ee.Dictionary(dict).get('importance'));
+var variable_importance2 = ee.Feature(null, ee.Dictionary(dict2).get('importance'));
+
+var variable_importance3 = ee.Feature(null, ee.Dictionary(dict3).get('importance'))
+var variable_importance4 = ee.Feature(null, ee.Dictionary(dict4).get('importance'))
+var variable_importance5 = ee.Feature(null, ee.Dictionary(dict5).get('importance'))
+
+var chart =
+ui.Chart.feature.byProperty(variable_importance)
+.setChartType('ColumnChart')
+.setOptions({
+title: 'Model RF Sen 2 Variable Importance',
+legend: {position: 'none'},
+hAxis: {title: 'Bands'},
+vAxis: {title: 'Importance'}
+});
+ 
+var chart2 =
+ui.Chart.feature.byProperty(variable_importance2)
+.setChartType('ColumnChart')
+.setOptions({
+title: 'Model 2 RF Sen 2 indices Variable Importance',
+legend: {position: 'none'},
+hAxis: {title: 'Bands'},
+vAxis: {title: 'Importance'}
+});
+
+var chart3 =
+ui.Chart.feature.byProperty(variable_importance3)
+.setChartType('ColumnChart')
+.setOptions({
+title: 'Model 3 RF Sen 1 Variable Importance',
+legend: {position: 'none'},
+hAxis: {title: 'Bands'},
+vAxis: {title: 'Importance'}
+});
+
+var chart4 =
+ui.Chart.feature.byProperty(variable_importance4)
+.setChartType('ColumnChart')
+.setOptions({
+title: 'Model 4 RF Sen 1 + Sen 2 Variable Importance',
+legend: {position: 'none'},
+hAxis: {title: 'Bands'},
+vAxis: {title: 'Importance'}
+});
+
+var chart5 =
+ui.Chart.feature.byProperty(variable_importance5)
+.setChartType('ColumnChart')
+.setOptions({
+title: 'Model 5 RF Sen 1 + Sen 2 Indices Variable Importance',
+legend: {position: 'none'},
+hAxis: {title: 'Bands'},
+vAxis: {title: 'Importance'}
+});
+
+print(chart);
+print(chart2)
+print(chart3)
+print(chart4)
+print(chart5)
+
+
+/*Export.image.toDrive({
+  image: img_amostral, 
+  description: 'img_amostral', 
+  region: roi, 
+  scale: 10, 
+  folder: 'mestrado', 
+  crs: 'EPSG:4326', 
+  maxPixels: 1e13
+  
+  }) */
+  
+  /*Export.table.toDrive({
+  collection: roi,
+  description: 'roi_nova',
+  folder: 'GEE_export_qualificacao',
+  fileFormat: 'SHP'
+  }) */
